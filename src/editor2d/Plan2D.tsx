@@ -68,7 +68,10 @@ export default function Plan2D() {
     const s = Math.min((W - pad * 2) / Math.max(b.w, 1), (H - pad * 2) / Math.max(b.h, 1), 140);
     setView({ s, ox: W / 2 - (b.minX + b.w / 2) * s, oy: H / 2 - (b.minY + b.h / 2) * s });
   }, [level, below, size.w, size.h]);
-  useEffect(() => { const id = requestAnimationFrame(fit); return () => cancelAnimationFrame(id); }, [fitNonce, level.id]); // eslint-disable-line
+  const userMoved = useRef(false);
+  useEffect(() => { userMoved.current = false; const id = requestAnimationFrame(fit); return () => cancelAnimationFrame(id); }, [fitNonce, level.id]); // eslint-disable-line
+  // keep the plan framed when the pane resizes (view switch, panels) until the user pans/zooms
+  useEffect(() => { if (!userMoved.current) { const id = requestAnimationFrame(fit); return () => cancelAnimationFrame(id); } }, [size.w, size.h]); // eslint-disable-line
 
   const toWorld = (cx: number, cy: number): Vec2 => {
     const r = svgRef.current!.getBoundingClientRect();
@@ -222,7 +225,7 @@ export default function Plan2D() {
       return;
     }
     const st = store.getState();
-    if (d.t === 'pan') { d.moved = true; setView((v) => ({ ...v, ox: d.ox + e.clientX - d.sx, oy: d.oy + e.clientY - d.sy })); return; }
+    if (d.t === 'pan') { d.moved = true; userMoved.current = true; setView((v) => ({ ...v, ox: d.ox + e.clientX - d.sx, oy: d.oy + e.clientY - d.sy })); return; }
     if (d.t === 'roomRect' || d.t === 'roofRect') { setRectPreview({ a: d.start, b: snap(w) }); return; }
     if (d.t === 'item') {
       d.moved = true;
@@ -374,6 +377,7 @@ export default function Plan2D() {
   const onWheel = (e: React.WheelEvent) => {
     const r = svgRef.current!.getBoundingClientRect();
     const mx = e.clientX - r.left, my = e.clientY - r.top;
+    userMoved.current = true;
     const k = Math.exp(-e.deltaY * (e.ctrlKey ? 0.01 : 0.0015));
     setView((v) => { const s = Math.max(4, Math.min(600, v.s * k)); const f = s / v.s; return { s, ox: mx - (mx - v.ox) * f, oy: my - (my - v.oy) * f }; });
   };

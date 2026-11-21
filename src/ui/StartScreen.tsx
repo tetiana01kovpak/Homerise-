@@ -6,6 +6,7 @@ import { generateFromText } from '../ai/generator';
 import { buildFromSpec } from '../state/build';
 import { openProject, generateHome } from '../state/actions';
 import { planSVG } from '../io/export';
+import { houseThumbnail } from './thumbs';
 import { newProject } from '../model/ops';
 import { isProjectJSON, IMAGE_EXTS, ext } from '../io/import';
 import type { Project } from '../model/types';
@@ -26,7 +27,7 @@ export function StartScreen() {
   const canClose = useStore((s) => s.project.levels.some((l) => l.walls.length > 0));
   const recents = listProjects();
   const fileRef = useRef<HTMLInputElement>(null);
-  const examples = useMemo(() => EXAMPLE_PROMPTS.map((e) => { const p = buildFromSpec(generateFromText(e.prompt)); p.name = e.title; return { e, p, thumb: planThumb(p) }; }), []);
+  const examples = useMemo(() => EXAMPLE_PROMPTS.map((e) => { const p = buildFromSpec(generateFromText(e.prompt)); p.name = e.title; let thumb: string; try { thumb = houseThumbnail(e.id, p); } catch { thumb = planThumb(p); } return { e, p, thumb }; }), []);
 
   const go = async (prompt: string) => {
     if (!prompt.trim() || busy) return;

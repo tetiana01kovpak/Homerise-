@@ -57,7 +57,9 @@
 
 export interface VPoint { x: number; y: number }
 export interface VectorWall { a: VPoint; b: VPoint; thickness: number }
-export interface VectorOpening { wallIndex: number; kind: 'door' | 'window'; t: number; width: number }
+/** 'opening' = doorless gap / passage (no door or window symbol found). */
+export type VectorOpeningKind = 'door' | 'window' | 'opening';
+export interface VectorOpening { wallIndex: number; kind: VectorOpeningKind; t: number; width: number }
 export interface VectorRoom { points: VPoint[]; area: number }
 export interface VectorResult {
   walls: VectorWall[];
@@ -94,7 +96,7 @@ export interface VectorDebug {
 
 type P = VPoint;
 interface Seg { a: P; b: P; t: number; joinA: boolean; joinB: boolean; dead: boolean; mergedInto?: Seg }
-interface OpenRec { p0: P; p1: P; kind: 'door' | 'window'; host: Seg }
+interface OpenRec { p0: P; p1: P; kind: VectorOpeningKind; host: Seg }
 
 const sub = (a: P, b: P): P => ({ x: a.x - b.x, y: a.y - b.y });
 const add = (a: P, b: P): P => ({ x: a.x + b.x, y: a.y + b.y });
@@ -362,6 +364,22 @@ interface Prepared {
   est: { tDom: number; tMin: number; tMax: number; thickFrac: number };
 }
 
+/** Robust sigma of paper noise: median |horizontal neighbour difference| on light pixels. */
+function pixelNoise(g: Uint8Array, W: number, thr: number): number {
+  const hist = new Float64Array(256);
+  let n = 0;
+  const step = Math.max(1, Math.floor(g.length / 400000));
+  for (let i = 0; i + 1 < g.length; i += step) {
+    if ((i + 1) % W === 0) continue;
+    const a = g[i], b = g[i + 1];
+    if (a <= thr || b <= thr) continue;
+    hist[Math.abs(a - b)]++; n++;
+  }
+  let acc = 0;
+  for (let v = 0; v < 256; v++) { acc += hist[v]; if (acc >= n / 2) return (1.4826 * v) / Math.SQRT2; }
+  return 0;
+}
+
 /** Threshold, wall-thickness estimate and morphological opening. */
 function prepare(gray: Uint8Array, W: number, H: number, closeK: number): Prepared | null {
   const N = W * H;
@@ -370,7 +388,9 @@ function prepare(gray: Uint8Array, W: number, H: number, closeK: number): Prepar
   const mask = new Uint8Array(N);
   const ink = new Uint8Array(N);
   // lenient threshold for faint thin lines, but kept >= 3 sigma away from the paper noise
-  const inkThr = Math.max(th.thr, Math.min(th.thr + 0.45 * (th.meanHi - th.thr), th.meanHi - 3 * th.sdHi));
+  // (pixel noise is measured from neighbour differences, so flat pastel room
+  // fills do not count as noise)
+  const inkThr = Math.max(th.thr, Math.min(th.thr + 0.45 * (th.meanHi - th.thr), th.meanHi - 4 * pixelNoise(gray, W, th.thr)));
   for (let i = 0; i < N; i++) { const g = gray[i]; if (g <= th.thr) mask[i] = 1; if (g <= inkThr) ink[i] = 1; }
   // hatched / outlined walls: fill enclosed thin light regions (wall interiors)
   const wallSrc = closeK > 0 ? fillThinHoles(mask, W, H, closeK) : mask;
@@ -715,7 +735,7 @@ function extractBands(m: Uint8Array, W: number, H: number, minLen: number, minT:
       if (L < minLen) continue;
       let thin = 0;
       for (let k = s; k < x; k++) if (vr[row + k] * 1.2 <= L) thin++;
-      if (thin * 2 >= L) for (let k = s; k < x; k++) cand[row + k] = 1;
+      if (thin >= 0.3 * L) for (let k = s; k < x; k++) cand[row + k] = 1;
     }
   }
   const out: Band[] = [];
@@ -1080,8 +1100,8 @@ function windowEvidence(ink: Uint8Array, W: number, H: number, E: P, d: P, n: P,
 
 function arcScore(ink: Uint8Array, wall: Uint8Array, W: number, H: number, c: P, u: P, v: P, r: number): number {
   let valid = 0, hit = 0;
-  for (let k = 0; k < 16; k++) {
-    const th = ((8 + (74 * k) / 15) * Math.PI) / 180;
+  for (let k = 0; k < 24; k++) {
+    const th = ((8 + (74 * k) / 23) * Math.PI) / 180;
     const p = add(c, add(mul(u, r * Math.cos(th)), mul(v, r * Math.sin(th))));
     if (p.x < 0 || p.y < 0 || p.x >= W || p.y >= H) continue;
     if (near(wall, W, H, p.x, p.y, 1)) continue;
@@ -1091,17 +1111,62 @@ function arcScore(ink: Uint8Array, wall: Uint8Array, W: number, H: number, c: P,
   return valid >= 8 ? hit / valid : 0;
 }
 
+/** Fraction of points along a straight door leaf (hinge -> hinge + v·r) that hit ink. */
+function leafScore(ink: Uint8Array, wall: Uint8Array, W: number, H: number, c: P, v: P, r: number): number {
+  let valid = 0, hit = 0;
+  for (let k = 0; k < 16; k++) {
+    const p = add(c, mul(v, r * (0.15 + (0.75 * k) / 15)));
+    if (p.x < 0 || p.y < 0 || p.x >= W || p.y >= H) continue;
+    if (near(wall, W, H, p.x, p.y, 1)) continue;
+    valid++;
+    if (near(ink, W, H, p.x, p.y, 1)) hit++;
+  }
+  return valid >= 8 ? hit / valid : 0;
+}
+
+/** Length of a continuous ink line from c along v (gaps <= 2 px tolerated). */
+function leafLength(ink: Uint8Array, W: number, H: number, c: P, v: P, maxLen: number): number {
+  let last = 0, miss = 0;
+  for (let s = 2; s <= maxLen; s += 1) {
+    const p = add(c, mul(v, s));
+    if (near(ink, W, H, p.x, p.y, 1)) { last = s; miss = 0; } else if (++miss > 2) break;
+  }
+  return last;
+}
+
+/**
+ * Door symbol score: a quarter arc of radius = gap around either jamb, on either
+ * side. Dashed arcs only hit ~half the samples, so a weaker arc counts when the
+ * straight leaf at the hinge is also present.
+ */
 function doorEvidence(ink: Uint8Array, wall: Uint8Array, W: number, H: number, E: P, F: P, d: P, n: P, g: number, h: number): number {
   let best = 0;
   const nd = mul(d, -1);
+  const single = (hinge: P, u: P, v: P, r: number) => {
+    let arc = arcScore(ink, wall, W, H, hinge, u, v, r);
+    if (arc >= 0.55) return arc;
+    const leaf = leafScore(ink, wall, W, H, hinge, v, r);
+    // the leaf may be shorter than the gap (door next to a corner / stub):
+    // measure it and test the arc at that radius
+    if (leaf >= 0.5) {
+      const L = leafLength(ink, W, H, hinge, v, 1.1 * r);
+      if (L >= 0.6 * r && L < 0.97 * r) {
+        const a2 = arcScore(ink, wall, W, H, hinge, u, v, L);
+        if (a2 >= 0.55) return a2;
+        if (a2 >= 0.25) return 0.6;
+      }
+    }
+    if (arc < 0.25) return arc;
+    return leaf >= 0.7 ? 0.6 : arc;
+  };
   for (const side of [1, -1]) {
     const v = mul(n, side);
     for (const off of [h, 0]) {
       for (const rf of [1, 0.96, 1.04]) {
         const r = g * rf;
         best = Math.max(best,
-          arcScore(ink, wall, W, H, add(E, mul(v, off)), d, v, r),
-          arcScore(ink, wall, W, H, add(F, mul(v, off)), nd, v, r));
+          single(add(E, mul(v, off)), d, v, r),
+          single(add(F, mul(v, off)), nd, v, r));
         const dbl = (arcScore(ink, wall, W, H, add(E, mul(v, off)), d, v, r / 2)
           + arcScore(ink, wall, W, H, add(F, mul(v, off)), nd, v, r / 2)) / 2;
         best = Math.max(best, dbl);
@@ -1117,8 +1182,8 @@ function detectOpenings(
   const m2p = (m: number) => m / mpp;
   const gMin = m2p(loose ? 0.35 : 0.45);
   const gMaxDoor = m2p(loose ? 2.6 : 2.0);
-  const gMaxWin = m2p(loose ? 3.6 : 3.0);
-  const gMaxPlain = m2p(loose ? 1.4 : 1.25);
+  const gMaxWin = m2p(loose ? 6.0 : 5.5);
+  const gMaxPlain = m2p(loose ? 5.0 : 4.5);
   const failed = new Set<string>();
   let guard = 0;
   let progress = true;
@@ -1140,6 +1205,8 @@ function detectOpenings(
           if (t < bestT) { bestT = t; bestW = Wg; }
         }
         const g = bestT - 1;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        if ((globalThis as any).process?.env?.VDBG) console.log('ray', E.x.toFixed(0), E.y.toFixed(0), 'g', g.toFixed(0));
         if (!bestW || g < gMin || g > gMaxWin) { failed.add(key); continue; }
         const dW = segDir(bestW);
         const parallel = Math.abs(cross(d, dW)) < 0.1;
@@ -1160,10 +1227,15 @@ function detectOpenings(
         if (ns && solid / ns > 0.3) { failed.add(key); continue; }
         const win = windowEvidence(ink, W, H, E, d, n, g, hS);
         const door = g <= gMaxDoor ? doorEvidence(ink, wallMask, W, H, E, F, d, n, g, hS) : 0;
-        let kind: 'door' | 'window' | null = null;
+        let kind: VectorOpeningKind | null = null;
         if (win.cov >= 0.7 && (win.runs >= 2 || (collinear && door < 0.5))) kind = 'window';
         else if (door >= 0.55) kind = 'door';
-        else if (collinear && g <= gMaxPlain && win.cov < 0.3) kind = 'door';
+        // sliding / garage door: a dashed line along the wall centre
+        else if (collinear && g <= gMaxWin && win.cov >= 0.3 && win.runs <= 1) kind = 'door';
+        // doorless passage between two in-line wall pieces
+        else if (collinear && g <= gMaxPlain && win.cov < 0.3) kind = 'opening';
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        if ((globalThis as any).process?.env?.VDBG) console.log('gap', E.x.toFixed(0), E.y.toFixed(0), 'g', g.toFixed(0), 'col', collinear, 'win', win.cov.toFixed(2), win.runs, 'door', door.toFixed(2), kind);
         if (!kind) { failed.add(key); continue; }
         if (collinear) {
           mergeInto(S, bestW);

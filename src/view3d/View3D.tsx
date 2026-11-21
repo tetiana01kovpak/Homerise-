@@ -60,18 +60,20 @@ function CameraRig({ box }: { box: THREE.Box3 }) {
   const { camera, controls } = useThree() as unknown as { camera: THREE.PerspectiveCamera; controls: { target: THREE.Vector3; update: () => void } | null };
   const fitNonce = useStore((s) => s.fitNonce);
   const camMode = useStore((s) => s.view3d.camera);
+  const walk = useStore((s) => s.view3d.mode === 'walk');
   useEffect(() => {
+    if (walk) return;
     const c = box.getCenter(new THREE.Vector3());
     const size = box.getSize(new THREE.Vector3());
     // distance so the whole footprint fits the viewport (accounting for aspect ratio)
     const R = Math.max(Math.hypot(size.x, size.z), 8) * 0.55;
     const vfov = (camera.fov * Math.PI) / 180;
     const hfov = 2 * Math.atan(Math.tan(vfov / 2) * camera.aspect);
-    const dist = (R / Math.sin(Math.min(vfov, hfov) / 2)) * 0.82;
+    const dist = (R / Math.sin(Math.min(vfov, hfov) / 2)) * 0.95;
     if (camMode === 'top') camera.position.set(c.x, dist, c.z + 0.01);
-    else { const dir = new THREE.Vector3(0.55, 0.78, 0.95).normalize(); camera.position.copy(c).addScaledVector(dir, dist); }
+    else { const dir = new THREE.Vector3(0.5, 1.2, 0.85).normalize(); camera.position.copy(c).addScaledVector(dir, dist); }
     if (controls) { controls.target.set(c.x, Math.min(1, c.y), c.z); controls.update(); } else camera.lookAt(c);
-  }, [fitNonce, controls, camMode]); // eslint-disable-line
+  }, [fitNonce, controls, camMode, walk]); // eslint-disable-line
   return null;
 }
 
@@ -106,7 +108,11 @@ function Walker() {
     if (r) { const xs = r.points.map((p) => p.x), ys = r.points.map((p) => p.y); start = { x: (Math.min(...xs) + Math.max(...xs)) / 2, y: (Math.min(...ys) + Math.max(...ys)) / 2 }; }
     void front;
     camera.position.set(start.x, lv.elevation + 1.62, start.y);
-    camera.rotation.set(0, 0, 0);
+    // face into the house (toward the footprint centre)
+    const pts = lv.rooms.flatMap((x) => x.points);
+    const hc = pts.length ? { x: pts.reduce((t, q) => t + q.x, 0) / pts.length, y: pts.reduce((t, q) => t + q.y, 0) / pts.length } : { x: start.x, y: start.y - 1 };
+    const dx = hc.x - start.x, dy = hc.y - start.y;
+    camera.lookAt(start.x + (Math.abs(dx) + Math.abs(dy) < 0.5 ? 0 : dx), lv.elevation + 1.5, start.y + (Math.abs(dx) + Math.abs(dy) < 0.5 ? 1 : dy));
     const kd = (e: KeyboardEvent) => { keys.current[e.code] = e.type === 'keydown'; };
     window.addEventListener('keydown', kd); window.addEventListener('keyup', kd);
     return () => { window.removeEventListener('keydown', kd); window.removeEventListener('keyup', kd); };
@@ -132,7 +138,14 @@ function Walker() {
     });
     if (!blocked) { camera.position.x = next.x; camera.position.z = next.y; }
   });
-  return <PointerLockControls />;
+  return <><PointerLockControls /><CameraLight /></>;
+}
+
+function CameraLight() {
+  const { camera } = useThree();
+  const ref = useRef<THREE.PointLight>(null);
+  useFrame(() => { ref.current?.position.copy(camera.position); });
+  return <><pointLight ref={ref} intensity={6} distance={9} decay={1.6} color="#fff4e6" /><ambientLight intensity={0.35} /></>;
 }
 
 function House({ project }: { project: Project }) {
@@ -204,7 +217,7 @@ function Ground({ box }: { box: THREE.Box3 }) {
   if (!show) return <gridHelper args={[80, 80, '#c9ced6', '#e3e6ea']} position={[c.x, lv.elevation - 0.01, c.z]} />;
   return <mesh rotation-x={-Math.PI / 2} position={[c.x, -0.3, c.z]} receiveShadow>
     <circleGeometry args={[90, 64]} />
-    <meshStandardMaterial color={tex ? '#ffffff' : project.settings.groundColor} map={tex ?? undefined} roughness={1} />
+    <meshStandardMaterial color={tex ? '#ffffff' : project.settings.groundColor} {...(tex ? { map: tex } : {})} roughness={1} />
   </mesh>;
 }
 
@@ -239,7 +252,7 @@ export default function View3D() {
         <color attach="background" args={['#EEF1F5']} />
         <fog attach="fog" args={['#EEF1F5', 60, 220]} />
         <Environment />
-        <hemisphereLight args={['#ffffff', '#b7c2b0', 0.9]} />
+        <hemisphereLight args={['#ffffff', '#c9cfc2', 1.15]} />
         <Sun box={box} />
         <Ground box={box} />
         <House project={project} />
@@ -247,7 +260,7 @@ export default function View3D() {
         <CameraRig box={box} />
         <Registry />
         <EffectComposer multisampling={0} enableNormalPass={false}>
-          <N8AO aoRadius={0.9} intensity={2.2} distanceFalloff={0.6} halfRes quality="medium" />
+          <N8AO aoRadius={0.9} intensity={1.6} distanceFalloff={0.6} halfRes quality="medium" />
           <SMAA />
           <ToneMapping />
         </EffectComposer>

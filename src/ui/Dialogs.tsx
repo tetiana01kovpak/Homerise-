@@ -81,10 +81,10 @@ export function ExportDialog() {
 
 // ---------------------------------------------------------------- Settings
 const MODELS = [
-  { id: 'claude-opus-5-5', label: 'Claude Opus 5.5 — best quality (default)' },
-  { id: 'claude-sonnet-5-5', label: 'Claude Sonnet 5.5 — faster' },
-  { id: 'claude-haiku-5-5', label: 'Claude Haiku 5.5 — fastest, lowest cost' },
-  { id: 'claude-fable-5-2', label: 'Claude Fable 5.2 — most capable' },
+  { id: 'claude-opus-5-5', label: 'Opus 5.5 — best (default)' },
+  { id: 'claude-sonnet-5-5', label: 'Sonnet 5.5 — faster' },
+  { id: 'claude-haiku-5-5', label: 'Haiku 5.5 — fastest' },
+  { id: 'claude-fable-5-2', label: 'Fable 5.2 — most capable' },
 ];
 export function SettingsDialog() {
   const ai = useStore((s) => s.ai);

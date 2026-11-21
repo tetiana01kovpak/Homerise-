@@ -54,7 +54,7 @@ function wallMaterials(w: Wall, p: Project, rooms: Room[]) {
     else { left = w.colorLeft ?? s.exteriorWallColor; right = w.colorRight ?? s.exteriorWallColor; }
   }
   const cap = colorMaterial(w.exterior ? '#E6E2DA' : '#EDEBE6', { roughness: 0.9 });
-  const capTop = colorMaterial('#D8D4CC', { roughness: 0.9 });
+  const capTop = colorMaterial('#3B4048', { roughness: 0.7 });
   // BoxGeometry face order: +x, -x, +y, -y, +z, -z ; local +z = wall normal (left side)
   return [cap, cap, capTop, cap, colorMaterial(left, { roughness: 0.92 }), colorMaterial(right, { roughness: 0.92 })];
 }
@@ -316,7 +316,7 @@ function buildRoofs(level: Level, p: Project) {
   for (const r of level.roofs) {
     const { geom } = roofGeometry(r);
     const tex = r.kind === 'flat' ? null : roofTexture(r.color);
-    const top = new THREE.MeshStandardMaterial({ color: tex ? '#ffffff' : r.color, map: tex ?? undefined, roughness: 0.8 });
+    const top = new THREE.MeshStandardMaterial({ color: tex ? '#ffffff' : r.color, ...(tex ? { map: tex } : {}), roughness: 0.8 });
     const side = colorMaterial(r.kind === 'gable' ? p.settings.exteriorWallColor : '#E8E5DF', { roughness: 0.85 });
     const m = new THREE.Mesh(geom, [top, side]);
     m.position.y = r.base ?? level.height;

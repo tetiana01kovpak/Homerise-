@@ -73,3 +73,37 @@ export function thumbnail(id: string, cb: (url: string) => void): string | undef
 }
 export function unsubscribe(id: string, cb: (url: string) => void) { listeners.get(id)?.delete(cb); }
 export function invalidateThumb(id: string) { cache.delete(id); }
+
+// ---------- whole-house thumbnails (start screen) ----------
+import type { Project } from '../model/types';
+import { buildHouse } from '../view3d/build';
+const houseCache = new Map<string, string>();
+export function houseThumbnail(key: string, p: Project): string {
+  const hit = houseCache.get(key);
+  if (hit) return hit;
+  if (!renderer) init();
+  const r = renderer!;
+  r.setSize(400, 300);
+  const g = buildHouse(p, { levels: 'all', showRoof: true, showFurniture: false });
+  const ground = new THREE.Mesh(new THREE.CircleGeometry(60, 48), new THREE.MeshStandardMaterial({ color: '#B7CBA9', roughness: 1 }));
+  ground.rotation.x = -Math.PI / 2; ground.position.y = -0.05;
+  scene.add(g); scene.add(ground);
+  const box = new THREE.Box3().setFromObject(g);
+  const size = box.getSize(new THREE.Vector3()), c = box.getCenter(new THREE.Vector3());
+  const cam = new THREE.PerspectiveCamera(30, 4 / 3, 0.1, 500);
+  const R = Math.max(size.x, size.z, size.y * 1.6) * 0.62;
+  const dist = R / Math.sin((cam.fov * Math.PI) / 360) * 0.92;
+  cam.position.copy(c).addScaledVector(new THREE.Vector3(0.75, 0.62, 1).normalize(), dist);
+  cam.lookAt(c);
+  scene.background = new THREE.Color('#EEF2EC');
+  r.toneMappingExposure = 0.88;
+  r.render(scene, cam);
+  r.toneMappingExposure = 1.05;
+  const url = r.domElement.toDataURL('image/jpeg', 0.86);
+  scene.background = null;
+  scene.remove(g); scene.remove(ground);
+  g.traverse((m) => { const mesh = m as THREE.Mesh; if (mesh.isMesh && !mesh.userData.cached) mesh.geometry.dispose(); });
+  r.setSize(200, 150);
+  houseCache.set(key, url);
+  return url;
+}

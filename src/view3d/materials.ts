@@ -114,7 +114,7 @@ export function floorMaterial(id: string) {
   if (matCache.has(key)) return matCache.get(key)!;
   const def = FLOOR_MATERIALS.find((m) => m.id === id) ?? FLOOR_MATERIALS[0];
   const tex = floorTexture(id);
-  const m = new THREE.MeshStandardMaterial({ color: tex ? '#ffffff' : def.color, map: tex ?? undefined, roughness: def.kind === 'marble' || def.kind === 'tile' ? 0.35 : def.kind === 'carpet' ? 0.95 : 0.6, metalness: 0 });
+  const m = new THREE.MeshStandardMaterial({ color: tex ? '#ffffff' : def.color, ...(tex ? { map: tex } : {}), roughness: def.kind === 'marble' || def.kind === 'tile' ? 0.35 : def.kind === 'carpet' ? 0.95 : 0.6, metalness: 0 });
   matCache.set(key, m);
   return m;
 }
@@ -130,7 +130,7 @@ export function colorMaterial(color: string, opts: { roughness?: number; metalne
 export const glassMaterial = () => {
   const key = 'glass';
   if (matCache.has(key)) return matCache.get(key)!;
-  const m = new THREE.MeshPhysicalMaterial({ color: '#cfe6f2', roughness: 0.05, metalness: 0, transmission: 0, transparent: true, opacity: 0.28, side: THREE.DoubleSide, depthWrite: false });
+  const m = new THREE.MeshPhysicalMaterial({ color: '#dcebf3', roughness: 0.05, metalness: 0, transmission: 0, transparent: true, opacity: 0.16, side: THREE.DoubleSide, depthWrite: false });
   matCache.set(key, m);
   return m;
 };
