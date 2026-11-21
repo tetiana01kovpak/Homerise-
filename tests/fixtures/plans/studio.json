@@ -1,0 +1,263 @@
+{
+ "id": "studio",
+ "note": "meters; SVG drawn at 60 px/m with 1.6 m padding (+70 px title band); PNG rendered at 2x => 120 px/m",
+ "bounds": {
+  "minX": 0,
+  "minY": 0,
+  "maxX": 7,
+  "maxY": 6.5,
+  "w": 7,
+  "h": 6.5
+ },
+ "outerWidth": 7.3,
+ "walls": [
+  {
+   "a": {
+    "x": 0,
+    "y": 0
+   },
+   "b": {
+    "x": 4.9,
+    "y": 0
+   },
+   "thickness": 0.3,
+   "exterior": true
+  },
+  {
+   "a": {
+    "x": 4.9,
+    "y": 0
+   },
+   "b": {
+    "x": 4.9,
+    "y": 3.6
+   },
+   "thickness": 0.12,
+   "exterior": false
+  },
+  {
+   "a": {
+    "x": 4.9,
+    "y": 3.6
+   },
+   "b": {
+    "x": 3.15,
+    "y": 3.6
+   },
+   "thickness": 0.12,
+   "exterior": false
+  },
+  {
+   "a": {
+    "x": 3.15,
+    "y": 3.6
+   },
+   "b": {
+    "x": 4.440892098500626e-16,
+    "y": 3.6
+   },
+   "thickness": 0.12,
+   "exterior": false
+  },
+  {
+   "a": {
+    "x": 0,
+    "y": 3.6
+   },
+   "b": {
+    "x": 0,
+    "y": 0
+   },
+   "thickness": 0.3,
+   "exterior": true
+  },
+  {
+   "a": {
+    "x": 4.9,
+    "y": 0
+   },
+   "b": {
+    "x": 7,
+    "y": 0
+   },
+   "thickness": 0.3,
+   "exterior": true
+  },
+  {
+   "a": {
+    "x": 7,
+    "y": 0
+   },
+   "b": {
+    "x": 7,
+    "y": 3.6
+   },
+   "thickness": 0.3,
+   "exterior": true
+  },
+  {
+   "a": {
+    "x": 7,
+    "y": 3.6
+   },
+   "b": {
+    "x": 4.9,
+    "y": 3.6
+   },
+   "thickness": 0.12,
+   "exterior": false
+  },
+  {
+   "a": {
+    "x": 3.15,
+    "y": 3.6
+   },
+   "b": {
+    "x": 3.15,
+    "y": 6.5
+   },
+   "thickness": 0.12,
+   "exterior": false
+  },
+  {
+   "a": {
+    "x": 3.15,
+    "y": 6.5
+   },
+   "b": {
+    "x": 4.440892098500626e-16,
+    "y": 6.5
+   },
+   "thickness": 0.3,
+   "exterior": true
+  },
+  {
+   "a": {
+    "x": 0,
+    "y": 6.5
+   },
+   "b": {
+    "x": 0,
+    "y": 3.6
+   },
+   "thickness": 0.3,
+   "exterior": true
+  },
+  {
+   "a": {
+    "x": 7,
+    "y": 3.6
+   },
+   "b": {
+    "x": 7,
+    "y": 6.5
+   },
+   "thickness": 0.3,
+   "exterior": true
+  },
+  {
+   "a": {
+    "x": 7,
+    "y": 6.5
+   },
+   "b": {
+    "x": 3.1500000000000004,
+    "y": 6.5
+   },
+   "thickness": 0.3,
+   "exterior": true
+  }
+ ],
+ "openings": [
+  {
+   "kind": "opening",
+   "width": 1.89,
+   "at": {
+    "x": 1.5749999999999995,
+    "y": 3.6
+   }
+  },
+  {
+   "kind": "door",
+   "width": 0.9,
+   "at": {
+    "x": 3.15,
+    "y": 5.799999999999999
+   }
+  },
+  {
+   "kind": "opening",
+   "width": 2.16,
+   "at": {
+    "x": 4.9,
+    "y": 1.8
+   }
+  },
+  {
+   "kind": "frontDoor",
+   "width": 1,
+   "at": {
+    "x": 1.5749999999999997,
+    "y": 6.5
+   }
+  },
+  {
+   "kind": "slidingDoor",
+   "width": 2.2,
+   "at": {
+    "x": 2.45,
+    "y": 0
+   }
+  },
+  {
+   "kind": "wideWindow",
+   "width": 2.2,
+   "at": {
+    "x": 0,
+    "y": 1.8
+   }
+  },
+  {
+   "kind": "window",
+   "width": 1.2,
+   "at": {
+    "x": 7,
+    "y": 1.8
+   }
+  },
+  {
+   "kind": "window",
+   "width": 1.2,
+   "at": {
+    "x": 5.95,
+    "y": 0
+   }
+  },
+  {
+   "kind": "window",
+   "width": 0.7,
+   "at": {
+    "x": 5.075,
+    "y": 6.5
+   }
+  }
+ ],
+ "rooms": [
+  {
+   "name": "Living & Sleeping",
+   "type": "living"
+  },
+  {
+   "name": "Kitchen",
+   "type": "kitchen"
+  },
+  {
+   "name": "Entry",
+   "type": "hall"
+  },
+  {
+   "name": "Bathroom",
+   "type": "bathroom"
+  }
+ ]
+}
