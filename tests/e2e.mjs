@@ -133,7 +133,8 @@ await step('custom models', async () => {
   const cm2 = await page.evaluate(() => window.__homerise.getState().project.customModels);
   check('custom STL model imported (unit autodetect)', cm2.length === 2 && cm2[1].w > 0.1 && cm2[1].w < 0.5 /* 1:100 mm print of an 18.6 m house = 0.186 m */, JSON.stringify(cm2[1]));
   await page.setInputFiles('[data-testid=model-upload]', 'tests/shots/export.obj');
-  await page.waitForTimeout(2500);
+  // the OBJ is a full-house export (~40 MB) — poll instead of a fixed sleep
+  await page.waitForFunction(() => window.__homerise.getState().project.customModels.length === 3, null, { timeout: 60000 }).catch(() => {});
   const n3 = await page.evaluate(() => window.__homerise.getState().project.customModels.length);
   check('custom OBJ model imported', n3 === 3);
   await page.click(`.lib-item >> nth=0`);

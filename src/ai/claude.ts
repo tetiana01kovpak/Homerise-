@@ -5,8 +5,13 @@ import type { HouseSpec } from '../model/spec';
 
 const FALLBACK_BETA = 'server-side-fallback-2026-07-01';
 
+/** Claude.ai / Claude Code subscription tokens (sk-ant-oat…) are not API keys and are refused for third-party apps. */
+export const isOAuthToken = (k: string) => /^sk-ant-oat/i.test(k.trim());
+export const OAUTH_MSG = 'That is a Claude subscription (OAuth) token, not an API key. Create an API key (starts with sk-ant-api) at console.anthropic.com and paste it here.';
+
 export function client(s: AISettings) {
   if (!s.apiKey) throw new Error('Add your Claude API key in Settings to use AI features.');
+  if (isOAuthToken(s.apiKey)) throw new Error(OAUTH_MSG);
   return new Anthropic({ apiKey: s.apiKey, dangerouslyAllowBrowser: true, maxRetries: 2 });
 }
 

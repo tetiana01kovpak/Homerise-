@@ -4,9 +4,9 @@ import { useStore, activeLevel, saveAI } from '../state/store';
 import { Modal, Switch } from './common';
 import { exportModel, download, planSVG, svgToPng, printPlans, exportDXF, exportProjectJSON, safeName, snapshot3D, type ModelFormat } from '../io/export';
 import { imageData, readAsDataURL, ext, IMAGE_EXTS } from '../io/import';
-import { testKey, aiImageToPlan } from '../ai/claude';
-import { vectorizePlan } from '../vision/vectorize';
-import { vectorToProject, type PlanVector } from '../model/fromPlan';
+import { testKey } from '../ai/claude';
+import { convertPlanImage } from '../vision/planImport';
+import { vectorToProject } from '../model/fromPlan';
 import { furnishProject } from '../model/furnish';
 import { openProject } from '../state/actions';
 import { uid } from '../model/types';
@@ -150,33 +150,17 @@ export function ImportPlanDialog({ file }: { file: File }) {
       }
       setBusy('Reading the plan…');
       const img = await imageData(url, 1800);
-      const det = vectorizePlan({ width: img.data.width, height: img.data.height, data: img.data.data }, isFinite(widthM) && widthM > 0 ? { expectedWidthMeters: widthM } : {});
-      let vec: PlanVector;
-      if (mode === 'ai') {
-        setBusy('Claude is reading your floor plan…');
-        const c = document.createElement('canvas'); c.width = img.data.width; c.height = img.data.height; c.getContext('2d')!.putImageData(img.data, 0, 0);
-        const b64 = c.toDataURL('image/png').split(',')[1];
-        const mpp0 = det.metersPerPixel;
-        const r = await aiImageToPlan(st.ai, { base64: b64, mediaType: 'image/png', width: c.width, height: c.height }, { walls: det.walls.map((w) => ({ a: { x: w.a.x / mpp0, y: w.a.y / mpp0 }, b: { x: w.b.x / mpp0, y: w.b.y / mpp0 } })), metersPerPixel: mpp0 });
-        let mpp = r.metersPerPixel > 0.001 && r.metersPerPixel < 1 ? r.metersPerPixel : mpp0;
-        if (isFinite(widthM) && widthM > 0 && r.walls.length) { const xs = r.walls.flatMap((w) => [w.x1, w.x2]); mpp = widthM / (Math.max(...xs) - Math.min(...xs)); }
-        vec = {
-          walls: r.walls.map((w) => ({ a: { x: w.x1 * mpp, y: w.y1 * mpp }, b: { x: w.x2 * mpp, y: w.y2 * mpp }, thickness: Math.max(0.1, w.thickness_px * mpp) })),
-          openings: r.openings.map((o) => ({ at: { x: o.x * mpp, y: o.y * mpp }, width: o.width_px * mpp, kind: o.kind as never })),
-          rooms: r.rooms.map((m) => ({ name: m.name, type: m.type as never, at: { x: m.label_x * mpp, y: m.label_y * mpp } })),
-        };
-      } else {
-        vec = {
-          walls: det.walls,
-          openings: det.openings.map((o) => { const w = det.walls[o.wallIndex]; const L = Math.hypot(w.b.x - w.a.x, w.b.y - w.a.y) || 1; return { at: { x: w.a.x + ((w.b.x - w.a.x) * o.t) / L, y: w.a.y + ((w.b.y - w.a.y) * o.t) / L }, width: o.width, kind: o.kind }; }),
-        };
-      }
+      const conv = await convertPlanImage({ width: img.data.width, height: img.data.height, data: img.data.data }, {
+        mode, widthM, ai: st.ai, onStage: setBusy,
+        encodePng: (im) => { const c = document.createElement('canvas'); c.width = im.width; c.height = im.height; c.getContext('2d')!.putImageData(new ImageData(new Uint8ClampedArray(im.data), im.width, im.height), 0, 0); return c.toDataURL('image/png').split(',')[1]; },
+      });
+      const vec = conv.vec;
       setBusy('Building your 3D home…');
       const p = vectorToProject(vec, name, { furnish: (pr) => { furnishProject(pr); } });
       if (!p.levels[0].walls.length) throw new Error('No walls were found in this image. Try a clearer plan, or use “Trace manually”.');
       // keep the source image as a tracing reference
       const bb = { minX: Math.min(...vec.walls.flatMap((w) => [w.a.x, w.b.x])), minY: Math.min(...vec.walls.flatMap((w) => [w.a.y, w.b.y])) };
-      const mppImg = mode === 'auto' ? det.metersPerPixel : (vec.walls[0] ? det.metersPerPixel : 0.02);
+      const mppImg = conv.metersPerPixel;
       p.trace = { [p.levels[0].id]: { dataUrl: url, x: -bb.minX, y: -bb.minY, metersPerPixel: mppImg, opacity: 0.0, width: img.data.width, height: img.data.height } };
       p.id = uid('prj');
       await openProject(p);

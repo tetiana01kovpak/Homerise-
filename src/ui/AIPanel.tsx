@@ -2,20 +2,14 @@ import { useEffect, useRef, useState } from 'react';
 import { Sparkles, Send, X, Wrench, KeyRound, Loader2, Square } from 'lucide-react';
 import type Anthropic from '@anthropic-ai/sdk';
 import { useStore } from '../state/store';
-import { create, friendly } from '../ai/claude';
-import { TOOLS, runTool } from '../ai/tools';
+import { friendly } from '../ai/claude';
+import { runDesigner } from '../ai/designer';
 import { generateFromText, parseBrief } from '../ai/generator';
 import { buildFromSpec } from '../state/build';
 import { furnishProject } from '../model/furnish';
 import { rebuildRoofs } from '../ai/tools';
 
 type Msg = { role: 'user' | 'assistant' | 'tool' | 'error'; text: string };
-
-const SYSTEM = `You are the AI Designer inside Homerise, a home design app (like RoomSketcher). You edit the user's live project through tools.
-Coordinates are meters: x right, y down (the plan's "front"/street side is usually +y). Rooms are polygons; walls have openings.
-Workflow: call get_plan first, then make precise edits with the tools, then reply briefly (1–3 sentences) describing what changed. For a new house or a big redesign, use create_house.
-Use search_catalog to find furniture ids before add_item. Keep furniture inside rooms, clear of doors, with walking space. Prefer against_wall for wall-hugging furniture.
-Never invent ids. If something isn't possible with the tools, say so plainly.`;
 
 const CHIPS = ['Furnish every room', 'Make it a modern house with a flat roof', 'Add a home office next to the living room', 'Paint the bedrooms a soft sage green', 'Add a pool and terrace in the garden', 'Design a 3-bed cottage with a gable roof'];
 
@@ -54,28 +48,15 @@ export function AIPanel() {
       return;
     }
     setBusy(true); stop.current = false;
-    history.current.push({ role: 'user', content: q });
     try {
       st.checkpoint();
-      for (let turn = 0; turn < 24 && !stop.current; turn++) {
-        const m = await create(st.ai, { max_tokens: 16000, system: SYSTEM, tools: TOOLS, messages: history.current } as never);
-        history.current.push({ role: 'assistant', content: m.content as never });
-        const said = m.content.filter((b) => b.type === 'text').map((b) => (b as { text: string }).text).join('\n').trim();
-        if (said) push({ role: 'assistant', text: said });
-        if (m.stop_reason !== 'tool_use') break;
-        const results: Anthropic.Beta.BetaToolResultBlockParam[] = [];
-        for (const b of m.content) {
-          if (b.type !== 'tool_use') continue;
-          const r = runTool(b.name, (b.input ?? {}) as Record<string, unknown>);
-          push({ role: 'tool', text: r.summary });
-          results.push({ type: 'tool_result', tool_use_id: b.id, content: JSON.stringify(r.result).slice(0, 60000), is_error: !r.ok });
-        }
-        history.current.push({ role: 'user', content: results });
-      }
+      await runDesigner(st.ai, history.current, q, {
+        shouldStop: () => stop.current,
+        onEvent: (e) => push(e.kind === 'text' ? { role: 'assistant', text: e.text } : { role: 'tool', text: e.summary }),
+      });
     } catch (e) {
+      // runDesigner already rolled the conversation back to a valid state
       push({ role: 'error', text: friendly(e).message });
-      // keep the conversation valid: drop a dangling user turn
-      if (history.current[history.current.length - 1]?.role === 'user') history.current.pop();
     } finally { setBusy(false); }
   };
 

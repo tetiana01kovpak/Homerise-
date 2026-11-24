@@ -1,9 +1,9 @@
-import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, useCallback } from 'react';
 import type { Level, Vec2, Wall, Opening, Item, Room } from '../model/types';
 import type { PlanShape as PlanShapeLike } from '../catalog/types';
 import { useStore, activeLevel } from '../state/store';
-import { wallPolygon, wallExtensions, wallLength, wallAngle, projectToSegment, dist, labelPoint, absArea, formatArea, formatLength, pointInPolygon, nearestWall, detectRooms, centroid, levelBounds, sub, add, mul, norm, wallNormal, dot } from '../model/geometry';
-import { addWallMerged, addPolygonRoom, ROOM_DEFAULTS, OPENING_DEFAULTS, addOpening, moveWallEndpoint, fitOpening, openingOverlaps, guessRoomType } from '../model/ops';
+import { wallPolygon, wallExtensions, wallLength, wallAngle, projectToSegment, dist, labelPoint, absArea, formatArea, formatLength, pointInPolygon, nearestWall, detectRooms, levelBounds, sub, add, mul, norm, wallNormal, dot } from '../model/geometry';
+import { addWallMerged, addPolygonRoom, ROOM_DEFAULTS, OPENING_DEFAULTS, addOpening, moveWallEndpoint, fitOpening, openingOverlaps } from '../model/ops';
 import { snapToWall, itemCorners, planToLocal } from '../model/place';
 import { getCatalogItem } from '../catalog';
 import { uid } from '../model/types';
@@ -43,7 +43,9 @@ export default function Plan2D() {
   const svgRef = useRef<SVGSVGElement>(null);
   const [size, setSize] = useState({ w: 800, h: 600 });
   const [view, setView] = useState<View>({ s: 50, ox: 200, oy: 150 });
-  const viewRef = useRef(view); viewRef.current = view;
+  const viewRef = useRef(view);
+  useLayoutEffect(() => { viewRef.current = view; }, [view]);
+  const [panning, setPanning] = useState(false);
   const [cursor, setCursor] = useState<Vec2 | null>(null);
   const [snapInfo, setSnapInfo] = useState<{ p: Vec2; kind: string; guides?: { x?: number; y?: number } } | null>(null);
   const [chain, setChain] = useState<Vec2[]>([]); // wall / polygon drawing
@@ -150,7 +152,7 @@ export default function Plan2D() {
     const target = (e.target as Element).closest('[data-kind]') as HTMLElement | null;
     const kind = target?.dataset.kind, id = target?.dataset.id;
     if (e.button === 1 || spaceDown || tool === 'pan' || e.button === 2 && tool === 'select') {
-      drag.current = { t: 'pan', sx: e.clientX, sy: e.clientY, ox: view.ox, oy: view.oy, moved: false }; return;
+      drag.current = { t: 'pan', sx: e.clientX, sy: e.clientY, ox: view.ox, oy: view.oy, moved: false }; setPanning(true); return;
     }
     if (e.button === 2) { // right click ends chains
       if (chain.length) { finishChain(); }
@@ -317,7 +319,7 @@ export default function Plan2D() {
   };
 
   const onPointerUp = (e: React.PointerEvent) => {
-    const d = drag.current; drag.current = null;
+    const d = drag.current; drag.current = null; setPanning(false);
     if (!d) return;
     if (d.t === 'roomRect') {
       setRectPreview(null);
@@ -402,7 +404,9 @@ export default function Plan2D() {
     window.addEventListener('keydown', onKey, true); window.addEventListener('keyup', onKey, true);
     return () => { window.removeEventListener('keydown', onKey, true); window.removeEventListener('keyup', onKey, true); };
   });
-  useEffect(() => { setChain([]); setTyped(''); setRectPreview(null); }, [tool]);
+  // reset in-progress drawing when the tool changes (adjusting state during render, not in an effect)
+  const [prevTool, setPrevTool] = useState(tool);
+  if (prevTool !== tool) { setPrevTool(tool); setChain([]); setTyped(''); setRectPreview(null); }
 
   // ---------- drop from library (HTML5 DnD)
   const onDrop = (e: React.DragEvent) => {
@@ -458,7 +462,7 @@ export default function Plan2D() {
   const selItem = selection?.kind === 'item' ? level.items.find((i) => i.id === selection.id) : undefined;
   const selWall = selection?.kind === 'wall' ? level.walls.find((w) => w.id === selection.id) : undefined;
 
-  const cursorStyle = drag.current?.t === 'pan' || spaceDown || tool === 'pan' ? 'grabbing' : tool === 'select' ? 'default' : 'crosshair';
+  const cursorStyle = panning || spaceDown || tool === 'pan' ? 'grabbing' : tool === 'select' ? 'default' : 'crosshair';
 
   // overall dimensions
   const lb = levelBounds({ ...level, items: [] });
@@ -723,4 +727,3 @@ function ItemHandles({ it, T, s }: { it: Item; T: (p: Vec2) => string; s: number
   </g>;
 }
 
-export { guessRoomType, centroid };
